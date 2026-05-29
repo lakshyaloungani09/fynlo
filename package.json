@@ -58,5 +58,7 @@
       "target": "dmg"
     }
   },
-  "productName": "Fynlo"
+  "productName": "Fynlo",
+  "description": "Fynlo - Smart Business Accounting Software",
+  "author": "Lakshya Loungani"
 }
