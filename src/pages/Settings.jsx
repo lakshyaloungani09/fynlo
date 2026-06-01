@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
-import { addDocument, getDocuments, updateDocument } from '../firebase'
+import { addDocument, getDocuments, updateDocument, deleteDocument } from '../firebase'
+import { collection, getDocs, deleteDoc, doc, getFirestore } from 'firebase/firestore'
+
+const db = getFirestore()
 
 export default function Settings() {
   const [form, setForm] = useState({ name: '', gstin: '', address: '', phone: '' })
   const [docId, setDocId] = useState(null)
   const [saved, setSaved] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetDone, setResetDone] = useState(false)
 
   useEffect(() => {
     getDocuments('company').then(snap => {
@@ -29,13 +34,41 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2500)
   }
 
+  const resetAllData = async () => {
+    const confirmed = window.confirm(
+      '⚠️ WARNING!\n\nYeh action SABB data delete kar dega:\n• Saare invoices\n• Saare customers\n• Saare vendors\n• Saara inventory\n• Saare payments\n• Saari bills\n\nKya aap sure hain? Yeh undo nahi ho sakta!'
+    )
+    if (!confirmed) return
+
+    const confirmed2 = window.confirm('Aakhri baar confirm karo — SABB DATA DELETE HOGA!')
+    if (!confirmed2) return
+
+    setResetting(true)
+    try {
+      const COLLECTIONS = ['invoices', 'parties', 'items', 'payments', 'vendor_bills', 'bill_payments', 'expenses', 'journal_entries', 'accounts']
+
+      for (const colName of COLLECTIONS) {
+        const snap = await getDocs(collection(db, colName))
+        const deletePromises = snap.docs.map(d => deleteDoc(doc(db, colName, d.id)))
+        await Promise.all(deletePromises)
+      }
+
+      setResetDone(true)
+      setTimeout(() => setResetDone(false), 4000)
+    } catch (e) {
+      alert('Error: ' + e.message)
+    }
+    setResetting(false)
+  }
+
   return (
     <div>
       <div className="page-header">
         <div><h1 className="page-title">Settings</h1><p className="page-sub">Company profile and preferences</p></div>
       </div>
 
-      <div className="card" style={{ maxWidth: 560 }}>
+      {/* Company Profile */}
+      <div className="card mb-4" style={{ maxWidth: 560 }}>
         <div className="section-title">Company Profile</div>
         {saved && <div className="alert alert-success">✅ Settings saved successfully!</div>}
         <div className="form-group">
@@ -57,7 +90,8 @@ export default function Settings() {
         <button className="btn btn-primary" onClick={save}>Save Settings</button>
       </div>
 
-      <div className="card" style={{ maxWidth: 560, marginTop: 20 }}>
+      {/* About */}
+      <div className="card mb-4" style={{ maxWidth: 560 }}>
         <div className="section-title">About Fynlo</div>
         <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7 }}>
           Fynlo — AI-powered business accounting software<br />
@@ -65,6 +99,30 @@ export default function Settings() {
           Data synced to cloud in real-time<br />
           Version 1.0.0
         </p>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="card" style={{ maxWidth: 560, border: '1px solid var(--danger)', background: '#fff8f8' }}>
+        <div className="section-title" style={{ color: 'var(--danger)' }}>⚠️ Danger Zone</div>
+        
+        {resetDone && (
+          <div className="alert alert-success mb-4">
+            ✅ Sabb data successfully delete ho gaya!
+          </div>
+        )}
+
+        <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
+          Yeh button <strong>sabb data permanently delete</strong> kar dega — invoices, customers, vendors, inventory, payments sabb. Yeh action undo nahi ho sakta.
+        </p>
+
+        <button
+          className="btn btn-danger"
+          onClick={resetAllData}
+          disabled={resetting}
+          style={{ width: '100%', padding: '10px', fontSize: 14 }}
+        >
+          {resetting ? '🔄 Deleting all data...' : '🗑️ Reset All Data'}
+        </button>
       </div>
     </div>
   )

@@ -5,6 +5,10 @@ const initSqlJs = require('sql.js')
 
 const isDev = process.env.NODE_ENV === 'development'
 
+app.commandLine.appendSwitch('enable-speech-dispatcher')
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream')
+
 let win
 let db
 let SQL
@@ -13,14 +17,12 @@ const DB_PATH = path.join(app.getPath('userData'), 'fynlo.db')
 
 async function initDB() {
   SQL = await initSqlJs()
-
   if (fs.existsSync(DB_PATH)) {
     const fileBuffer = fs.readFileSync(DB_PATH)
     db = new SQL.Database(fileBuffer)
   } else {
     db = new SQL.Database()
   }
-
   db.run(`
     CREATE TABLE IF NOT EXISTS companies (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +32,6 @@ async function initDB() {
       phone TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -39,7 +40,6 @@ async function initDB() {
       opening_balance REAL DEFAULT 0,
       balance REAL DEFAULT 0
     );
-
     CREATE TABLE IF NOT EXISTS parties (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -50,7 +50,6 @@ async function initDB() {
       gstin TEXT,
       balance REAL DEFAULT 0
     );
-
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -62,7 +61,6 @@ async function initDB() {
       hsn_code TEXT,
       gst_rate REAL DEFAULT 18
     );
-
     CREATE TABLE IF NOT EXISTS invoices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       invoice_no TEXT NOT NULL,
@@ -79,7 +77,6 @@ async function initDB() {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (party_id) REFERENCES parties(id)
     );
-
     CREATE TABLE IF NOT EXISTS invoice_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       invoice_id INTEGER,
@@ -93,14 +90,12 @@ async function initDB() {
       FOREIGN KEY (invoice_id) REFERENCES invoices(id),
       FOREIGN KEY (item_id) REFERENCES items(id)
     );
-
     CREATE TABLE IF NOT EXISTS journal_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       date TEXT NOT NULL,
       narration TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS journal_lines (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       entry_id INTEGER,
@@ -112,8 +107,6 @@ async function initDB() {
       FOREIGN KEY (account_id) REFERENCES accounts(id)
     );
   `)
-
-  // Seed default accounts if empty
   const res = db.exec('SELECT COUNT(*) as c FROM accounts')
   const count = res[0]?.values[0][0]
   if (count === 0) {
@@ -133,7 +126,6 @@ async function initDB() {
       db.run('INSERT INTO accounts (name, type, group_name) VALUES (?, ?, ?)', [name, type, group])
     })
   }
-
   saveDB()
 }
 
@@ -153,10 +145,11 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webSecurity: false,
+      allowRunningInsecureContent: true,
     },
     icon: path.join(__dirname, '../public/icon.png'),
   })
-
   if (isDev) {
     win.loadURL('http://localhost:5173')
     win.webContents.openDevTools()
@@ -175,9 +168,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// ─── IPC Handlers ────────────────────────────────────────────────
-
-// Generic query helper
 function queryAll(sql, params = []) {
   try {
     const res = db.exec(sql, params)
@@ -191,11 +181,9 @@ function queryOne(sql, params = []) {
   return queryAll(sql, params)[0] || null
 }
 
-// Dashboard
 ipcMain.handle('dashboard:get', () => {
   const today = new Date().toISOString().split('T')[0]
   const monthStart = today.slice(0, 7) + '-01'
-
   const todaySales = queryOne(`SELECT COALESCE(SUM(grand_total),0) as val FROM invoices WHERE type='sale' AND date=?`, [today])
   const monthSales = queryOne(`SELECT COALESCE(SUM(grand_total),0) as val FROM invoices WHERE type='sale' AND date>=?`, [monthStart])
   const totalParties = queryOne(`SELECT COUNT(*) as val FROM parties`)
@@ -203,14 +191,8 @@ ipcMain.handle('dashboard:get', () => {
   const recentInvoices = queryAll(`SELECT * FROM invoices ORDER BY created_at DESC LIMIT 5`)
   const cashBal = queryOne(`SELECT balance FROM accounts WHERE name='Cash'`)
   const bankBal = queryOne(`SELECT balance FROM accounts WHERE name='Bank'`)
-
-  const salesChart = db.exec(`
-    SELECT date, SUM(grand_total) as total FROM invoices
-    WHERE type='sale' AND date >= date('now','-30 days')
-    GROUP BY date ORDER BY date
-  `)
+  const salesChart = db.exec(`SELECT date, SUM(grand_total) as total FROM invoices WHERE type='sale' AND date >= date('now','-30 days') GROUP BY date ORDER BY date`)
   const chartData = salesChart[0] ? salesChart[0].values.map(r => ({ date: r[0], total: r[1] })) : []
-
   return {
     todaySales: todaySales?.val || 0,
     monthSales: monthSales?.val || 0,
@@ -224,7 +206,6 @@ ipcMain.handle('dashboard:get', () => {
   }
 })
 
-// Parties
 ipcMain.handle('parties:getAll', () => queryAll('SELECT * FROM parties ORDER BY name'))
 ipcMain.handle('parties:get', (_, id) => queryOne('SELECT * FROM parties WHERE id=?', [id]))
 ipcMain.handle('parties:save', (_, p) => {
@@ -244,7 +225,6 @@ ipcMain.handle('parties:delete', (_, id) => {
   return { success: true }
 })
 
-// Items / Inventory
 ipcMain.handle('items:getAll', () => queryAll('SELECT * FROM items ORDER BY name'))
 ipcMain.handle('items:get', (_, id) => queryOne('SELECT * FROM items WHERE id=?', [id]))
 ipcMain.handle('items:save', (_, item) => {
@@ -264,7 +244,6 @@ ipcMain.handle('items:delete', (_, id) => {
   return { success: true }
 })
 
-// Invoices
 ipcMain.handle('invoices:getAll', (_, type) => {
   const sql = type ? 'SELECT * FROM invoices WHERE type=? ORDER BY date DESC' : 'SELECT * FROM invoices ORDER BY date DESC'
   return queryAll(sql, type ? [type] : [])
@@ -288,13 +267,11 @@ ipcMain.handle('invoices:save', (_, inv) => {
   inv.items?.forEach(item => {
     db.run('INSERT INTO invoice_items (invoice_id,item_id,item_name,qty,rate,amount,gst_rate,gst_amount) VALUES (?,?,?,?,?,?,?,?)',
       [inv.id, item.item_id, item.item_name, item.qty, item.rate, item.amount, item.gst_rate || 0, item.gst_amount || 0])
-    // Update stock
     if (inv.type === 'sale') {
       db.run('UPDATE items SET stock = stock - ? WHERE id=?', [item.qty, item.item_id])
     } else if (inv.type === 'purchase') {
       db.run('UPDATE items SET stock = stock + ? WHERE id=?', [item.qty, item.item_id])
     }
-    // Update party balance
     if (inv.party_id) {
       const delta = inv.type === 'sale' ? inv.grand_total : -inv.grand_total
       db.run('UPDATE parties SET balance = balance + ? WHERE id=?', [delta, inv.party_id])
@@ -310,7 +287,6 @@ ipcMain.handle('invoices:delete', (_, id) => {
   return { success: true }
 })
 
-// Accounts / Ledger
 ipcMain.handle('accounts:getAll', () => queryAll('SELECT * FROM accounts ORDER BY type, name'))
 ipcMain.handle('accounts:save', (_, acc) => {
   if (acc.id) {
@@ -324,7 +300,6 @@ ipcMain.handle('accounts:save', (_, acc) => {
   return { success: true }
 })
 
-// Journal
 ipcMain.handle('journal:getAll', () => {
   const entries = queryAll('SELECT * FROM journal_entries ORDER BY date DESC')
   return entries.map(e => ({
@@ -344,7 +319,6 @@ ipcMain.handle('journal:save', (_, entry) => {
   return { success: true }
 })
 
-// Reports
 ipcMain.handle('reports:trialBalance', () => queryAll('SELECT * FROM accounts ORDER BY type'))
 ipcMain.handle('reports:profitLoss', (_, from, to) => {
   const income = queryAll(`SELECT party_name, SUM(grand_total) as total FROM invoices WHERE type='sale' AND date BETWEEN ? AND ? GROUP BY party_name`, [from, to])
@@ -354,29 +328,19 @@ ipcMain.handle('reports:profitLoss', (_, from, to) => {
   return { income, expense, totalIncome, totalExpense, netProfit: totalIncome - totalExpense }
 })
 
-// Voice / AI entry parsing (simple NLP without external API)
 ipcMain.handle('ai:parseVoiceEntry', (_, text) => {
-  // Simple rule-based parser for common Hindi/English patterns
   const lower = text.toLowerCase()
   let result = { type: null, amount: null, party: null, item: null, narration: text }
-
-  // Extract amount
   const amtMatch = text.match(/(\d[\d,]*(?:\.\d+)?)\s*(?:rupee|rupay|rs|₹)?/i)
   if (amtMatch) result.amount = parseFloat(amtMatch[1].replace(/,/g, ''))
-
-  // Detect type
   if (/sale|becha|bika|diya|sold/i.test(lower)) result.type = 'sale'
   else if (/purchase|kharida|liya|bought/i.test(lower)) result.type = 'purchase'
   else if (/payment|paid|diya|mila|received/i.test(lower)) result.type = 'payment'
-
-  // Extract party name (after "ko", "se", "from", "to")
   const partyMatch = text.match(/(?:ko|se|from|to)\s+([A-Za-z\s]+?)(?:\s+(?:ka|ki|ke|mein|par|ko|se|,|$))/i)
   if (partyMatch) result.party = partyMatch[1].trim()
-
   return result
 })
 
-// Company settings
 ipcMain.handle('company:get', () => queryOne('SELECT * FROM companies LIMIT 1'))
 ipcMain.handle('company:save', (_, c) => {
   const existing = queryOne('SELECT id FROM companies LIMIT 1')

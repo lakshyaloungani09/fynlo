@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { HashRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
-import Parties from './pages/Parties'
+import Customers from './pages/Customers'
+import Vendors from './pages/Vendors'
 import Items from './pages/Items'
 import Invoices from './pages/Invoices'
-import Ledger from './pages/Ledger'
 import Reports from './pages/Reports'
 import VoiceEntry from './pages/VoiceEntry'
 import Settings from './pages/Settings'
@@ -15,9 +15,9 @@ const NAV = [
   { to: '/dashboard', icon: '⊞', label: 'Dashboard' },
   { to: '/invoices', icon: '📄', label: 'Billing' },
   { to: '/payments', icon: '💰', label: 'Payments' },
-  { to: '/parties', icon: '👥', label: 'Parties' },
+  { to: '/customers', icon: '👥', label: 'Customers' },
+  { to: '/vendors', icon: '🏭', label: 'Vendors' },
   { to: '/items', icon: '📦', label: 'Inventory' },
-  { to: '/ledger', icon: '📒', label: 'Ledger' },
   { to: '/reports', icon: '📊', label: 'Reports' },
   { to: '/voice', icon: '🎤', label: 'Voice AI' },
   { to: '/settings', icon: '⚙', label: 'Settings' },
@@ -51,9 +51,9 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/invoices/*" element={<Invoices />} />
             <Route path="/payments" element={<Payments />} />
-            <Route path="/parties" element={<Parties />} />
+            <Route path="/customers" element={<Customers />} />
+            <Route path="/vendors/*" element={<Vendors />} />
             <Route path="/items" element={<Items />} />
-            <Route path="/ledger" element={<Ledger />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/voice" element={<VoiceEntry />} />
             <Route path="/settings" element={<Settings />} />
