@@ -1,7 +1,9 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { useEffect, useState } from 'react'
-import { addDocument, getDocuments, updateDocument, deleteDocument } from '../firebase'
+import { useEffect, useRef, useState } from 'react'
+import { addDocument, getDocuments, updateDocument, deleteDocument, db } from '../firebase'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { Html5Qrcode } from 'html5-qrcode'
 
 const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN')
 const today = () => new Date().toISOString().split('T')[0]
@@ -20,6 +22,18 @@ export default function Invoices() {
   const [lines, setLines] = useState([{ ...EMPTY_LINE }])
   const [saving, setSaving] = useState(false)
 
+  // Scanner state
+  const [scannerActive, setScannerActive] = useState(false)
+  const [scannerMsg, setScannerMsg] = useState('')
+  // Association modal state
+  const [assocModal, setAssocModal] = useState(null) // { scannedCode }
+  const [assocItemId, setAssocItemId] = useState('')
+  const [assocSaving, setAssocSaving] = useState(false)
+
+  const scannerRef = useRef(null)
+  const html5QrRef = useRef(null)
+  const scannerDivId = 'fynlo-qr-reader'
+
   const load = async () => {
     const snap = await getDocuments('invoices')
     setInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() })))
@@ -29,6 +43,11 @@ export default function Invoices() {
     load()
     getDocuments('parties').then(s => setParties(s.docs.map(d => ({ id: d.id, ...d.data() }))))
     getDocuments('items').then(s => setItems(s.docs.map(d => ({ id: d.id, ...d.data() }))))
+  }, [])
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => { stopScanner() }
   }, [])
 
   const filtered = invoices.filter(inv => {
@@ -42,6 +61,98 @@ export default function Invoices() {
     setLines([{ ...EMPTY_LINE }])
     setModal(true)
   }
+
+  // ---------- SCANNER LOGIC ----------
+  const startScanner = async () => {
+    setScannerMsg('Camera shuru ho rahi hai...')
+    setScannerActive(true)
+    // Wait for div to render
+    await new Promise(r => setTimeout(r, 200))
+    try {
+      const qr = new Html5Qrcode(scannerDivId)
+      html5QrRef.current = qr
+      await qr.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 150 } },
+        (decodedText) => { handleScan(decodedText) },
+        () => {}
+      )
+      setScannerMsg('Camera scan karo...')
+    } catch (err) {
+      setScannerMsg('Camera access nahi mila: ' + err)
+    }
+  }
+
+  const stopScanner = async () => {
+    if (html5QrRef.current) {
+      try { await html5QrRef.current.stop() } catch (e) {}
+      html5QrRef.current = null
+    }
+    setScannerActive(false)
+    setScannerMsg('')
+  }
+
+  const handleScan = async (code) => {
+    await stopScanner()
+    setScannerMsg('🔍 Barcode mila: ' + code)
+
+    // 1. Direct match by item barcode field
+    const directMatch = items.find(i => i.barcode === code || i.id === code)
+    if (directMatch) {
+      addLineFromItem(directMatch)
+      setScannerMsg('✅ ' + directMatch.name + ' add ho gaya!')
+      setTimeout(() => setScannerMsg(''), 2500)
+      return
+    }
+
+    // 2. Check barcode_map collection in Firestore
+    const mapSnap = await getDocs(query(collection(db, 'barcode_map'), where('barcode', '==', code)))
+    if (!mapSnap.empty) {
+      const mapped = mapSnap.docs[0].data()
+      const foundItem = items.find(i => i.id === mapped.item_id)
+      if (foundItem) {
+        addLineFromItem(foundItem)
+        setScannerMsg('✅ ' + foundItem.name + ' add ho gaya!')
+        setTimeout(() => setScannerMsg(''), 2500)
+        return
+      }
+    }
+
+    // 3. Not found → show association modal
+    setAssocModal({ scannedCode: code })
+    setAssocItemId('')
+  }
+
+  const addLineFromItem = (item) => {
+    const newLine = {
+      item_id: item.id,
+      item_name: item.name,
+      qty: 1,
+      rate: item.sale_price,
+      gst_rate: item.gst_rate,
+      amount: item.sale_price,
+      gst_amount: item.sale_price * item.gst_rate / 100
+    }
+    setLines(ls => {
+      // Replace empty last line if exists
+      if (ls.length === 1 && !ls[0].item_name) return [newLine]
+      return [...ls, newLine]
+    })
+  }
+
+  // Save barcode → item association
+  const saveAssociation = async () => {
+    if (!assocItemId) return alert('Item select karo')
+    setAssocSaving(true)
+    await addDocument('barcode_map', { barcode: assocModal.scannedCode, item_id: assocItemId })
+    const foundItem = items.find(i => i.id === assocItemId)
+    if (foundItem) addLineFromItem(foundItem)
+    setAssocSaving(false)
+    setAssocModal(null)
+    setScannerMsg('✅ ' + (foundItem?.name || '') + ' associated & add ho gaya!')
+    setTimeout(() => setScannerMsg(''), 2500)
+  }
+  // ---------- END SCANNER ----------
 
   const calcLine = (line) => {
     const amount = (line.qty || 0) * (line.rate || 0)
@@ -99,20 +210,13 @@ export default function Invoices() {
 
   const generatePDF = (inv) => {
     const doc = new jsPDF()
-    doc.setFontSize(22)
-    doc.setTextColor(79, 70, 229)
+    doc.setFontSize(22); doc.setTextColor(79, 70, 229)
     doc.text('FYNLO', 105, 18, { align: 'center' })
-    doc.setFontSize(11)
-    doc.setTextColor(100, 100, 100)
+    doc.setFontSize(11); doc.setTextColor(100, 100, 100)
     doc.text('Smart Business Software', 105, 25, { align: 'center' })
-    doc.setDrawColor(79, 70, 229)
-    doc.setLineWidth(0.5)
-    doc.line(14, 30, 196, 30)
-    doc.setFontSize(18)
-    doc.setTextColor(30, 30, 30)
-    doc.text('INVOICE', 14, 42)
-    doc.setFontSize(11)
-    doc.setTextColor(80, 80, 80)
+    doc.setDrawColor(79, 70, 229); doc.setLineWidth(0.5); doc.line(14, 30, 196, 30)
+    doc.setFontSize(18); doc.setTextColor(30, 30, 30); doc.text('INVOICE', 14, 42)
+    doc.setFontSize(11); doc.setTextColor(80, 80, 80)
     doc.text('Invoice No: ' + inv.invoice_no, 14, 52)
     doc.text('Date: ' + inv.date, 14, 60)
     doc.text('Party: ' + inv.party_name, 14, 68)
@@ -124,31 +228,14 @@ export default function Invoices() {
     autoTable(doc, {
       startY: 85,
       head: [['Item', 'Qty', 'Rate (Rs)', 'GST%', 'GST Amt', 'Total']],
-      body: (inv.items || []).map(item => [
-        item.item_name,
-        item.qty,
-        Number(item.rate).toFixed(2),
-        item.gst_rate + '%',
-        Number(item.gst_amount).toFixed(2),
-        Number(item.amount + item.gst_amount).toFixed(2)
-      ]),
-      foot: [
-        ['', '', '', '', 'Subtotal', Number(inv.total).toFixed(2)],
-        ['', '', '', '', 'GST', Number(inv.tax).toFixed(2)],
-        ['', '', '', '', 'Grand Total', 'Rs ' + Number(inv.grand_total).toFixed(2)]
-      ],
+      body: (inv.items || []).map(item => [item.item_name, item.qty, Number(item.rate).toFixed(2), item.gst_rate + '%', Number(item.gst_amount).toFixed(2), Number(item.amount + item.gst_amount).toFixed(2)]),
+      foot: [['', '', '', '', 'Subtotal', Number(inv.total).toFixed(2)], ['', '', '', '', 'GST', Number(inv.tax).toFixed(2)], ['', '', '', '', 'Grand Total', 'Rs ' + Number(inv.grand_total).toFixed(2)]],
       headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
       footStyles: { fillColor: [238, 242, 255], textColor: [30, 30, 30], fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [249, 250, 251] },
     })
-    if (inv.notes) {
-      const finalY = doc.lastAutoTable.finalY + 10
-      doc.setFontSize(10)
-      doc.setTextColor(100, 100, 100)
-      doc.text('Notes: ' + inv.notes, 14, finalY)
-    }
-    doc.setFontSize(9)
-    doc.setTextColor(150, 150, 150)
+    if (inv.notes) { const finalY = doc.lastAutoTable.finalY + 10; doc.setFontSize(10); doc.setTextColor(100, 100, 100); doc.text('Notes: ' + inv.notes, 14, finalY) }
+    doc.setFontSize(9); doc.setTextColor(150, 150, 150)
     doc.text('Generated by Fynlo - Smart Business Software', 105, 285, { align: 'center' })
     doc.save('Invoice-' + inv.invoice_no + '.pdf')
   }
@@ -199,6 +286,7 @@ export default function Invoices() {
         </table>
       </div>
 
+      {/* New Invoice Modal */}
       {modal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setModal(false)}>
           <div className="modal modal-lg">
@@ -240,6 +328,24 @@ export default function Invoices() {
                 </select>
               </div>
             </div>
+
+            {/* Barcode Scanner Section */}
+            <div style={{ background: 'var(--primary-light)', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>📷 Barcode Scanner</span>
+                {!scannerActive
+                  ? <button className="btn btn-sm btn-primary" onClick={startScanner}>📷 Camera Scan</button>
+                  : <button className="btn btn-sm btn-danger" onClick={stopScanner}>⏹ Stop</button>
+                }
+              </div>
+              {scannerMsg && (
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>{scannerMsg}</div>
+              )}
+              {scannerActive && (
+                <div id={scannerDivId} style={{ width: '100%', borderRadius: 8, overflow: 'hidden' }} />
+              )}
+            </div>
+
             <div className="section-title">Items</div>
             <div className="table-wrap mb-4">
               <table>
@@ -284,6 +390,38 @@ export default function Invoices() {
             <div className="modal-footer">
               <button className="btn" onClick={() => setModal(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save Invoice'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Association Modal */}
+      {assocModal && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <span className="modal-title">🔗 Barcode Associate Karo</span>
+            </div>
+            <div style={{ padding: '16px 0' }}>
+              <div style={{ background: 'var(--primary-light)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontFamily: 'monospace', fontSize: 13 }}>
+                Scanned: <strong>{assocModal.scannedCode}</strong>
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+                Yeh barcode kisi item se linked nahi hai. Ek baar associate karo, aage se automatically add ho jaayega.
+              </p>
+              <div className="form-group">
+                <label>Inventory se Item Select Karo *</label>
+                <select value={assocItemId} onChange={e => setAssocItemId(e.target.value)}>
+                  <option value="">-- Item Select Karo --</option>
+                  {items.map(i => <option key={i.id} value={i.id}>{i.name} — {fmt(i.sale_price)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setAssocModal(null)}>Skip</button>
+              <button className="btn btn-primary" onClick={saveAssociation} disabled={assocSaving}>
+                {assocSaving ? 'Saving...' : '🔗 Associate & Add'}
+              </button>
             </div>
           </div>
         </div>
