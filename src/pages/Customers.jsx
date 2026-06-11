@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../AuthContext'
 import { addDocument, getDocuments, updateDocument, deleteDocument } from '../firebase'
 
 const EMPTY = { name: '', phone: '', email: '', address: '', gstin: '', type: 'customer' }
@@ -6,6 +7,8 @@ const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN')
 const UNKNOWN_CUSTOMER = { id: 'unknown', name: 'Walk-in Customer', phone: '', email: '', address: '', gstin: '', type: 'customer', balance: 0 }
 
 export default function Customers() {
+  const user = useAuth()
+  const uid = user?.uid
   const [customers, setCustomers] = useState([])
   const [invoices, setInvoices] = useState([])
   const [search, setSearch] = useState('')
@@ -17,8 +20,8 @@ export default function Customers() {
 
   const load = async () => {
     const [custSnap, invSnap] = await Promise.all([
-      getDocuments('parties'),
-      getDocuments('invoices')
+      getDocuments(uid, 'parties'),
+      getDocuments(uid, 'invoices')
     ])
     const all = custSnap.docs.map(d => ({ id: d.id, ...d.data() }))
     setCustomers(all.filter(p => p.type === 'customer' || p.type === 'both'))
@@ -42,9 +45,9 @@ export default function Customers() {
     const data = { ...form, type: 'customer' }
     if (form.id) {
       const { id, ...rest } = data
-      await updateDocument('parties', id, rest)
+      await updateDocument(uid, 'parties', id, rest)
     } else {
-      await addDocument('parties', data)
+      await addDocument(uid, 'parties', data)
     }
     setSaving(false)
     setModal(false)
@@ -53,7 +56,7 @@ export default function Customers() {
 
   const del = async (id) => {
     if (!confirm('Delete this customer?')) return
-    await deleteDocument('parties', id)
+    await deleteDocument(uid, 'parties', id)
     load()
   }
 

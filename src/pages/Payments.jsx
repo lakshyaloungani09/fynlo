@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../AuthContext'
 import { addDocument, getDocuments, updateDocument } from '../firebase'
 
 const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN')
@@ -6,6 +7,8 @@ const today = () => new Date().toISOString().split('T')[0]
 const EMPTY = { party_id: '', party_name: '', amount: '', mode: 'cash', date: today(), note: '', type: 'received' }
 
 export default function Payments() {
+  const user = useAuth()
+  const uid = user?.uid
   const [payments, setPayments] = useState([])
   const [parties, setParties] = useState([])
   const [search, setSearch] = useState('')
@@ -16,8 +19,8 @@ export default function Payments() {
 
   const load = async () => {
     const [paySnap, partySnap] = await Promise.all([
-      getDocuments('payments'),
-      getDocuments('parties')
+      getDocuments(uid, 'payments'),
+      getDocuments(uid, 'parties')
     ])
     setPayments(paySnap.docs.map(d => ({ id: d.id, ...d.data() })))
     setParties(partySnap.docs.map(d => ({ id: d.id, ...d.data() })))
@@ -48,13 +51,13 @@ export default function Payments() {
     if (!form.amount || +form.amount <= 0) return alert('Amount daalo')
     setSaving(true)
 
-    await addDocument('payments', { ...form, amount: +form.amount })
+    await addDocument(uid, 'payments', { ...form, amount: +form.amount })
 
     // Update party balance
     const party = parties.find(p => p.id === form.party_id)
     if (party) {
       const delta = form.type === 'received' ? -(+form.amount) : +(+form.amount)
-      await updateDocument('parties', form.party_id, { balance: (party.balance || 0) + delta })
+      await updateDocument(uid, 'parties', form.party_id, { balance: (party.balance || 0) + delta })
     }
 
     setSaving(false)

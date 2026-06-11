@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../AuthContext'
 import { addDocument, getDocuments, updateDocument, deleteDocument } from '../firebase'
 
 const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN')
@@ -8,6 +9,8 @@ const EMPTY_BILL = { party_id: '', party_name: '', invoice_no: '', invoice_date:
 const EMPTY_PAYMENT = { bill_id: '', party_id: '', party_name: '', amount: '', mode: 'cash', date: today(), note: '' }
 
 export default function Vendors() {
+  const user = useAuth()
+  const uid = user?.uid
   const [tab, setTab] = useState('vendors')
   const [vendors, setVendors] = useState([])
   const [bills, setBills] = useState([])
@@ -25,9 +28,9 @@ export default function Vendors() {
 
   const load = async () => {
     const [partySnap, billSnap, paySnap] = await Promise.all([
-      getDocuments('parties'),
-      getDocuments('vendor_bills'),
-      getDocuments('bill_payments')
+      getDocuments(uid, 'parties'),
+      getDocuments(uid, 'vendor_bills'),
+      getDocuments(uid, 'bill_payments')
     ])
     setVendors(partySnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.type === 'vendor' || p.type === 'both'))
     setBills(billSnap.docs.map(d => ({ id: d.id, ...d.data() })))
@@ -60,9 +63,9 @@ export default function Vendors() {
     const data = { ...vendorForm, type: 'vendor' }
     if (vendorForm.id) {
       const { id, ...rest } = data
-      await updateDocument('parties', id, rest)
+      await updateDocument(uid, 'parties', id, rest)
     } else {
-      await addDocument('parties', data)
+      await addDocument(uid, 'parties', data)
     }
     setSaving(false)
     setVendorModal(false)
@@ -71,7 +74,7 @@ export default function Vendors() {
 
   const delVendor = async (id) => {
     if (!confirm('Delete this vendor?')) return
-    await deleteDocument('parties', id)
+    await deleteDocument(uid, 'parties', id)
     load()
   }
 
@@ -80,7 +83,7 @@ export default function Vendors() {
     if (!billForm.amount || +billForm.amount <= 0) return alert('Amount daalo')
     if (!billForm.invoice_no) return alert('Invoice number daalo')
     setSaving(true)
-    await addDocument('vendor_bills', { ...billForm, amount: +billForm.amount })
+    await addDocument(uid, 'vendor_bills', { ...billForm, amount: +billForm.amount })
     setSaving(false)
     setBillModal(false)
     setBillForm(EMPTY_BILL)
@@ -94,7 +97,7 @@ export default function Vendors() {
     const remaining = getBillBalance(bill)
     if (+payForm.amount > remaining) return alert(`Maximum: ${fmt(remaining)}`)
     setSaving(true)
-    await addDocument('bill_payments', { ...payForm, amount: +payForm.amount })
+    await addDocument(uid, 'bill_payments', { ...payForm, amount: +payForm.amount })
     setSaving(false)
     setPayModal(false)
     setPayForm(EMPTY_PAYMENT)

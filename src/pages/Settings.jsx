@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../AuthContext'
 import { addDocument, getDocuments, updateDocument, deleteDocument } from '../firebase'
 import { collection, getDocs, deleteDoc, doc, getFirestore } from 'firebase/firestore'
 
 const db = getFirestore()
 
 export default function Settings() {
+  const user = useAuth()
+  const uid = user?.uid
   const [form, setForm] = useState({ name: '', gstin: '', address: '', phone: '' })
   const [docId, setDocId] = useState(null)
   const [saved, setSaved] = useState(false)
@@ -12,7 +15,7 @@ export default function Settings() {
   const [resetDone, setResetDone] = useState(false)
 
   useEffect(() => {
-    getDocuments('company').then(snap => {
+    getDocuments(uid, 'company').then(snap => {
       if (!snap.empty) {
         const d = snap.docs[0]
         setDocId(d.id)
@@ -25,9 +28,9 @@ export default function Settings() {
 
   const save = async () => {
     if (docId) {
-      await updateDocument('company', docId, form)
+      await updateDocument(uid, 'company', docId, form)
     } else {
-      const ref = await addDocument('company', form)
+      const ref = await addDocument(uid, 'company', form)
       setDocId(ref.id)
     }
     setSaved(true)

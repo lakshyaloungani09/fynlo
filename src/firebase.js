@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore'
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 
 const firebaseConfig = {
   apiKey: "AIzaSyCEw2I4aQD7kMA7cuQVpQnLG4yruq6KLKo",
@@ -13,8 +14,23 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig)
 export const db = getFirestore(app)
+export const auth = getAuth(app)
 
-export const addDocument = (col, data) => addDoc(collection(db, col), { ...data, createdAt: new Date() })
-export const getDocuments = (col) => getDocs(query(collection(db, col), orderBy('createdAt', 'desc')))
-export const updateDocument = (col, id, data) => updateDoc(doc(db, col, id), data)
-export const deleteDocument = (col, id) => deleteDoc(doc(db, col, id))
+// Auth helpers
+export const registerUser = (email, password) => createUserWithEmailAndPassword(auth, email, password)
+export const loginUser = (email, password) => signInWithEmailAndPassword(auth, email, password)
+export const logoutUser = () => signOut(auth)
+export const onAuthChange = (cb) => onAuthStateChanged(auth, cb)
+
+// Firestore helpers — uid se user ka apna sub-collection
+export const addDocument = (uid, col, data) =>
+  addDoc(collection(db, 'users', uid, col), { ...data, createdAt: new Date() })
+
+export const getDocuments = (uid, col) =>
+  getDocs(query(collection(db, 'users', uid, col), orderBy('createdAt', 'desc')))
+
+export const updateDocument = (uid, col, id, data) =>
+  updateDoc(doc(db, 'users', uid, col, id), data)
+
+export const deleteDocument = (uid, col, id) =>
+  deleteDoc(doc(db, 'users', uid, col, id))

@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { HashRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './AuthContext'
+import { logoutUser } from './firebase'
+import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Customers from './pages/Customers'
 import Vendors from './pages/Vendors'
@@ -23,8 +26,24 @@ const NAV = [
   { to: '/settings', icon: '⚙', label: 'Settings' },
 ]
 
-export default function App() {
+function AppShell() {
+  const user = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Loading
+  if (user === undefined) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 36, fontWeight: 800, color: 'var(--primary)', marginBottom: 8 }}>F</div>
+        <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading...</div>
+      </div>
+    </div>
+  )
+
+  // Not logged in
+  if (!user) return <Login />
+
+  // Logged in
   return (
     <HashRouter>
       <div className="app-shell">
@@ -41,6 +60,18 @@ export default function App() {
               </NavLink>
             ))}
           </nav>
+          {/* User info + logout */}
+          <div style={{ padding: sidebarOpen ? '12px 16px' : '12px 8px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
+            {sidebarOpen && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.email}
+              </div>
+            )}
+            <button className="btn btn-sm" onClick={logoutUser} style={{ width: '100%', justifyContent: 'center' }}
+              title="Logout">
+              {sidebarOpen ? '🚪 Logout' : '🚪'}
+            </button>
+          </div>
           <button className="collapse-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
             {sidebarOpen ? '◀' : '▶'}
           </button>
@@ -61,5 +92,13 @@ export default function App() {
         </main>
       </div>
     </HashRouter>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   )
 }

@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { useAuth } from '../AuthContext'
 import { useEffect, useRef, useState } from 'react'
 import { addDocument, getDocuments, updateDocument, deleteDocument, db } from '../firebase'
 import { collection, getDocs, query, where } from 'firebase/firestore'
@@ -12,6 +13,8 @@ const EMPTY_INV = { invoice_no: '', type: 'sale', party_id: '', party_name: '', 
 const EMPTY_LINE = { item_id: '', item_name: '', qty: 1, rate: 0, gst_rate: 0, amount: 0, gst_amount: 0 }
 
 export default function Invoices() {
+  const user = useAuth()
+  const uid = user?.uid
   const [invoices, setInvoices] = useState([])
   const [parties, setParties] = useState([])
   const [items, setItems] = useState([])
@@ -35,14 +38,14 @@ export default function Invoices() {
   const scannerDivId = 'fynlo-qr-reader'
 
   const load = async () => {
-    const snap = await getDocuments('invoices')
+    const snap = await getDocuments(uid, 'invoices')
     setInvoices(snap.docs.map(d => ({ id: d.id, ...d.data() })))
   }
 
   useEffect(() => {
     load()
-    getDocuments('parties').then(s => setParties(s.docs.map(d => ({ id: d.id, ...d.data() }))))
-    getDocuments('items').then(s => setItems(s.docs.map(d => ({ id: d.id, ...d.data() }))))
+    getDocuments(uid, 'parties').then(s => setParties(s.docs.map(d => ({ id: d.id, ...d.data() }))))
+    getDocuments(uid, 'items').then(s => setItems(s.docs.map(d => ({ id: d.id, ...d.data() }))))
   }, [])
 
   // Cleanup scanner on unmount
@@ -144,7 +147,7 @@ export default function Invoices() {
   const saveAssociation = async () => {
     if (!assocItemId) return alert('Item select karo')
     setAssocSaving(true)
-    await addDocument('barcode_map', { barcode: assocModal.scannedCode, item_id: assocItemId })
+    await addDocument(uid, 'barcode_map', { barcode: assocModal.scannedCode, item_id: assocItemId })
     const foundItem = items.find(i => i.id === assocItemId)
     if (foundItem) addLineFromItem(foundItem)
     setAssocSaving(false)
@@ -193,9 +196,9 @@ export default function Invoices() {
     const data = { ...form, total: totals.sub, tax: totals.tax, grand_total: grandTotal, items: lines.filter(l => l.item_name) }
     if (form.id) {
       const { id, ...rest } = data
-      await updateDocument('invoices', id, rest)
+      await updateDocument(uid, 'invoices', id, rest)
     } else {
-      await addDocument('invoices', data)
+      await addDocument(uid, 'invoices', data)
     }
     setSaving(false)
     setModal(false)
@@ -204,7 +207,7 @@ export default function Invoices() {
 
   const del = async (id) => {
     if (!confirm('Delete this invoice?')) return
-    await deleteDocument('invoices', id)
+    await deleteDocument(uid, 'invoices', id)
     load()
   }
 

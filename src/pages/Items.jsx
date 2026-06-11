@@ -1,3 +1,4 @@
+import { useAuth } from '../AuthContext'
 import { useEffect, useRef, useState } from 'react'
 import { addDocument, getDocuments, updateDocument, deleteDocument } from '../firebase'
 import JsBarcode from 'jsbarcode'
@@ -9,6 +10,8 @@ const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN')
 const genBarcode = () => 'FYN' + Date.now().toString().slice(-9)
 
 export default function Items() {
+  const user = useAuth()
+  const uid = user?.uid
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(false)
@@ -19,7 +22,7 @@ export default function Items() {
   const qrCanvasRef = useRef(null)
 
   const load = async () => {
-    const snap = await getDocuments('items')
+    const snap = await getDocuments(uid, 'items')
     setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })))
   }
 
@@ -69,9 +72,9 @@ export default function Items() {
     }
     if (form.id) {
       const { id, ...rest } = data
-      await updateDocument('items', id, rest)
+      await updateDocument(uid, 'items', id, rest)
     } else {
-      await addDocument('items', data)
+      await addDocument(uid, 'items', data)
     }
     setSaving(false)
     setModal(false)
@@ -80,7 +83,7 @@ export default function Items() {
 
   const del = async (id) => {
     if (!confirm('Delete this item?')) return
-    await deleteDocument('items', id)
+    await deleteDocument(uid, 'items', id)
     load()
   }
 

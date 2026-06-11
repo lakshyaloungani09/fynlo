@@ -5,6 +5,8 @@ const today = () => new Date().toISOString().split('T')[0]
 const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN')
 
 export default function VoiceEntry() {
+  const user = useAuth()
+  const uid = user?.uid
   const [listening, setListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const [status, setStatus] = useState('')
@@ -113,7 +115,7 @@ If you cannot determine a field, use null. Type must be one of: sale, purchase, 
       // Step 1: Party check karo — nahi hai toh add karo
       let partyId = null
       if (result.party) {
-        const partySnap = await getDocuments('parties')
+        const partySnap = await getDocuments(uid, 'parties')
         const parties = partySnap.docs.map(d => ({ id: d.id, ...d.data() }))
         const existing = parties.find(p => p.name.toLowerCase() === result.party.toLowerCase())
         
@@ -122,7 +124,7 @@ If you cannot determine a field, use null. Type must be one of: sale, purchase, 
         } else {
           // Nayi party add karo
           const partyType = result.type === 'sale' ? 'customer' : result.type === 'purchase' ? 'vendor' : 'both'
-          const newParty = await addDocument('parties', {
+          const newParty = await addDocument(uid, 'parties', {
             name: result.party,
             type: partyType,
             phone: '',
@@ -138,7 +140,7 @@ If you cannot determine a field, use null. Type must be one of: sale, purchase, 
 
       // Step 2: Entry type ke hisaab se save karo
       if (result.type === 'sale' || result.type === 'purchase') {
-        await addDocument('invoices', {
+        await addDocument(uid, 'invoices', {
           invoice_no: (result.type === 'sale' ? 'INV-' : 'PUR-') + Date.now().toString().slice(-6),
           type: result.type,
           party_id: partyId || '',
@@ -154,16 +156,16 @@ If you cannot determine a field, use null. Type must be one of: sale, purchase, 
 
         // Party balance update karo
         if (partyId) {
-          const partySnap = await getDocuments('parties')
+          const partySnap = await getDocuments(uid, 'parties')
           const party = partySnap.docs.map(d => ({ id: d.id, ...d.data() })).find(p => p.id === partyId)
           if (party) {
             const delta = result.type === 'sale' ? (result.amount || 0) : -(result.amount || 0)
-            await updateDocument('parties', partyId, { balance: (party.balance || 0) + delta })
+            await updateDocument(uid, 'parties', partyId, { balance: (party.balance || 0) + delta })
           }
         }
 
       } else if (result.type === 'payment_received' || result.type === 'payment_made') {
-        await addDocument('payments', {
+        await addDocument(uid, 'payments', {
           party_id: partyId || '',
           party_name: result.party || 'Unknown',
           amount: result.amount || 0,
@@ -175,16 +177,16 @@ If you cannot determine a field, use null. Type must be one of: sale, purchase, 
 
         // Party balance update karo
         if (partyId) {
-          const partySnap = await getDocuments('parties')
+          const partySnap = await getDocuments(uid, 'parties')
           const party = partySnap.docs.map(d => ({ id: d.id, ...d.data() })).find(p => p.id === partyId)
           if (party) {
             const delta = result.type === 'payment_received' ? -(result.amount || 0) : (result.amount || 0)
-            await updateDocument('parties', partyId, { balance: (party.balance || 0) + delta })
+            await updateDocument(uid, 'parties', partyId, { balance: (party.balance || 0) + delta })
           }
         }
 
       } else if (result.type === 'expense') {
-        await addDocument('expenses', {
+        await addDocument(uid, 'expenses', {
           description: result.narration || result.item || 'Expense',
           amount: result.amount || 0,
           date: today(),

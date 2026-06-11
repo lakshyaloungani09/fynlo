@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAuth } from '../AuthContext'
 import { getDocuments } from '../firebase'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -7,6 +8,8 @@ const today = () => new Date().toISOString().split('T')[0]
 const monthStart = () => new Date().toISOString().slice(0, 7) + '-01'
 
 export default function Dashboard() {
+  const user = useAuth()
+  const uid = user?.uid
   const [stats, setStats] = useState({ todaySales: 0, monthSales: 0, totalParties: 0, cashBalance: 0, lowStockCount: 0 })
   const [recentInvoices, setRecentInvoices] = useState([])
   const [lowStockItems, setLowStockItems] = useState([])
@@ -16,9 +19,9 @@ export default function Dashboard() {
   useEffect(() => {
     const load = async () => {
       const [invSnap, partiesSnap, itemsSnap] = await Promise.all([
-        getDocuments('invoices'),
-        getDocuments('parties'),
-        getDocuments('items')
+        getDocuments(uid, 'invoices'),
+        getDocuments(uid, 'parties'),
+        getDocuments(uid, 'items')
       ])
 
       const invoices = invSnap.docs.map(d => ({ id: d.id, ...d.data() }))
