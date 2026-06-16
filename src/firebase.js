@@ -3,7 +3,7 @@ import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, q
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth'
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCEw2I4aQD7kMA7cuQVpQnLG4yruq6KLKo",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,,
   authDomain: "fynlo-290ae.firebaseapp.com",
   projectId: "fynlo-290ae",
   storageBucket: "fynlo-290ae.firebasestorage.app",
