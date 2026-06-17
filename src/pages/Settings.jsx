@@ -1,4 +1,4 @@
-```jsx
+
 import { useEffect, useState } from 'react'
 import { useAuth } from '../AuthContext'
 import {
@@ -394,5 +394,3 @@ export default function Settings() {
     </div>
   )
 }
-```
-s

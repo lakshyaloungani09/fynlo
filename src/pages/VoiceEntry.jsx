@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { addDocument, getDocuments, updateDocument } from '../firebase'
+import { useAuth } from '../AuthContext'
 
 const today = () => new Date().toISOString().split('T')[0]
 const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN')

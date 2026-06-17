@@ -145,13 +145,12 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false,
-      allowRunningInsecureContent: true,
+      
     },
     icon: path.join(__dirname, '../public/icon.png'),
   })
   if (isDev) {
-    win.loadURL('http://localhost:5173')
+  win.loadURL('http://localhost:5173/fynlo/')
     win.webContents.openDevTools()
   } else {
     win.loadFile(path.join(__dirname, '../dist/index.html'))

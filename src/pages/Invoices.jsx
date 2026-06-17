@@ -316,9 +316,9 @@ export default function Invoices() {
       head: [['Item', 'Qty', 'Rate (₹)', 'GST%', 'GST Amt', 'Total']],
       body: (inv.items || []).map(item => [item.item_name, item.qty, Number(item.rate).toFixed(2), item.gst_rate + '%', Number(item.gst_amount).toFixed(2), Number(item.amount + item.gst_amount).toFixed(2)]),
       foot: [
-        ['', '', '', '', 'Subtotal', Number(inv.total).toFixed(2)],
-        ['', '', '', '', 'GST', Number(inv.tax).toFixed(2)],
-        ['', '', '', '', 'Grand Total', '₹' + Number(inv.grand_total).toFixed(2)],
+        ['', '', '', '', 'Price (Before Tax)', Number(inv.total).toFixed(2)],
+        ['', '', '', '', '+ GST', Number(inv.tax).toFixed(2)],
+        ['', '', '', '', '= Final Price', '₹' + Number(inv.grand_total).toFixed(2)],
       ],
       headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
       footStyles: { fillColor: [238, 242, 255], textColor: [30, 30, 30], fontStyle: 'bold' },
@@ -511,10 +511,10 @@ export default function Invoices() {
                     </tr>
                   ))}
                   <tr style={{ background: 'var(--primary-light)' }}>
-                    <td colSpan={4} className="fw-bold">Total</td>
+                    <td colSpan={4} className="fw-bold">Price (Before Tax)</td>
                     <td className="fw-bold">{fmt(totals.sub)}</td>
-                    <td className="fw-bold">{fmt(totals.tax)}</td>
-                    <td className="fw-bold" style={{ color: 'var(--primary)' }}>{fmt(grandTotal)}</td>
+                    <td className="fw-bold">+ {fmt(totals.tax)} GST</td>
+                    <td className="fw-bold" style={{ color: 'var(--primary)' }}>{fmt(grandTotal)} Final</td>
                     <td></td>
                   </tr>
                 </tbody>
