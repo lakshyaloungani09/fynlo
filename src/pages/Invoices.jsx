@@ -9,6 +9,11 @@ import { Html5Qrcode } from 'html5-qrcode'
 const fmt = n => '₹' + Number(n || 0).toLocaleString('en-IN')
 const today = () => new Date().toISOString().split('T')[0]
 const genNo = () => 'INV-' + Date.now().toString().slice(-6)
+// Item.sale_price is GST-inclusive; invoice lines need the base (excl. GST) rate
+const baseRateFromItem = (item) => {
+  const rate = +(item.gst_rate || 0)
+  return rate ? (+item.sale_price || 0) / (1 + rate / 100) : (+item.sale_price || 0)
+}
 
 const EMPTY_INV = {
   invoice_no: '',
@@ -162,7 +167,8 @@ export default function Invoices() {
   }
 
   const addLineFromItem = (item) => {
-    const newLine = { item_id: item.id, item_name: item.name, qty: 1, rate: item.sale_price, gst_rate: item.gst_rate, amount: item.sale_price, gst_amount: item.sale_price * item.gst_rate / 100 }
+    const rate = baseRateFromItem(item)
+    const newLine = { item_id: item.id, item_name: item.name, qty: 1, rate, gst_rate: item.gst_rate, amount: rate, gst_amount: rate * item.gst_rate / 100 }
     setLines(ls => ls.length === 1 && !ls[0].item_name ? [newLine] : [...ls, newLine])
   }
 
@@ -189,7 +195,7 @@ export default function Invoices() {
       let line = { ...updated[i], [k]: v }
       if (k === 'item_id') {
         const item = items.find(it => it.id === v)
-        if (item) { line.item_name = item.name; line.rate = item.sale_price; line.gst_rate = item.gst_rate }
+        if (item) { line.item_name = item.name; line.rate = baseRateFromItem(item); line.gst_rate = item.gst_rate }
       }
       updated[i] = calcLine(line)
       return updated
@@ -316,9 +322,9 @@ export default function Invoices() {
       head: [['Item', 'Qty', 'Rate (₹)', 'GST%', 'GST Amt', 'Total']],
       body: (inv.items || []).map(item => [item.item_name, item.qty, Number(item.rate).toFixed(2), item.gst_rate + '%', Number(item.gst_amount).toFixed(2), Number(item.amount + item.gst_amount).toFixed(2)]),
       foot: [
-        ['', '', '', '', 'Price (Before Tax)', Number(inv.total).toFixed(2)],
-        ['', '', '', '', '+ GST', Number(inv.tax).toFixed(2)],
-        ['', '', '', '', '= Final Price', '₹' + Number(inv.grand_total).toFixed(2)],
+        ['', '', '', '', 'Subtotal', Number(inv.total).toFixed(2)],
+        ['', '', '', '', 'GST', Number(inv.tax).toFixed(2)],
+        ['', '', '', '', 'Grand Total', '₹' + Number(inv.grand_total).toFixed(2)],
       ],
       headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
       footStyles: { fillColor: [238, 242, 255], textColor: [30, 30, 30], fontStyle: 'bold' },
@@ -511,10 +517,10 @@ export default function Invoices() {
                     </tr>
                   ))}
                   <tr style={{ background: 'var(--primary-light)' }}>
-                    <td colSpan={4} className="fw-bold">Price (Before Tax)</td>
+                    <td colSpan={4} className="fw-bold">Total</td>
                     <td className="fw-bold">{fmt(totals.sub)}</td>
-                    <td className="fw-bold">+ {fmt(totals.tax)} GST</td>
-                    <td className="fw-bold" style={{ color: 'var(--primary)' }}>{fmt(grandTotal)} Final</td>
+                    <td className="fw-bold">{fmt(totals.tax)}</td>
+                    <td className="fw-bold" style={{ color: 'var(--primary)' }}>{fmt(grandTotal)}</td>
                     <td></td>
                   </tr>
                 </tbody>
